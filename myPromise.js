@@ -14,9 +14,13 @@ function Promise(actuator) {
         if (this.state === STATE_PENDING) {
             this.state = STATE_FULFILLED;
             this.value = value;
-            this.callBack.forEach(p => {
-                p.onResolve(this.value)
+            //加入微任务
+            queueMicrotask(() => {
+                this.callBack.forEach(p => {
+                    p.onResolve(this.value)
+                })
             })
+
         }
     }
 
@@ -24,9 +28,12 @@ function Promise(actuator) {
         if (this.state === STATE_PENDING) {
             this.state = STATE_REJECTED;
             this.value = reason;
-            this.callBack.forEach(p => {
-                p.onReject(this.value)
+            queueMicrotask(() => {
+                this.callBack.forEach(p => {
+                    p.onReject(this.value)
+                })
             })
+
         }
     }
 
@@ -65,74 +72,47 @@ Promise.prototype.then = function (onResolve, onReject) {
     }
 
     return new Promise((resolve, reject) => {
-        if (this.state === STATE_FULFILLED) {
+        const func = (cb, value) => {
             try {
-                let result = onResolve(this.value);
-                // if (result instanceof Promise) {
-                //     resolve(result)
-                // } else {
-                //     resolve(result)
-                // }
-                if (result instanceof Promise) {
-                    result.then(resolve,reject)
-                    // result.then(value => {
-                    //     resolve(value)
-                    // }, e => {
-                    //     reject(e)
+                queueMicrotask(() => {
+                    let result = cb(value);
+                    // if (result instanceof Promise) {
+                    //     resolve(result)
+                    // } else {
+                    //     resolve(result)
+                    // }
+                    if (result instanceof Promise) {
+                        result.then(resolve, reject)
+                        // result.then(value => {
+                        //     resolve(value)
+                        // }, e => {
+                        //     reject(e)
 
-                    // })
-                } else {
-                    resolve(result)
+                        // })
+                    } else {
+                        resolve(result)
 
-                }
+                    }
+                })
+
             } catch (error) {
                 reject(error)
             }
+        }
+        if (this.state === STATE_FULFILLED) {
+            func(onResolve, this.value)
 
         }
         if (this.state === STATE_REJECTED) {
-            try {
-                let result = onReject(this.value);
-                if (result instanceof Promise) {
-                    result.then(resolve,reject)
-
-                } else {
-                    resolve(result)
-
-                }
-            } catch (error) {
-                reject(error)
-            }
+            func(onReject, this.value)
         }
         if (this.state === STATE_PENDING) {
             this.callBack.push({
                 onResolve: value => {
-                    try {
-                        let result = onResolve(value)
-                        if (result instanceof Promise) {
-                            result.then(resolve,reject)
-                        } else {
-                            resolve(result)
-
-                        }
-                    } catch (error) {
-                        reject(error)
-                    }
-
+                    func(onResolve, value)
                 },
                 onReject: reason => {
-                    try {
-                        let result = onReject(reason)
-                        if (result instanceof Promise) {
-                            result.then(resolve,reject)
-                        } else {
-                            resolve(result)
-
-                        }
-                    } catch (error) {
-                        reject(error)
-                    }
-
+                    func(onReject, reason)
                 }
             });
         }
@@ -187,12 +167,12 @@ Promise.all = function (list) {
     })
 }
 
-Promise.race=function(list){
-    return new Promise((resolve,reject)=>{
-        list.forEach(p=>{
-            if(p instanceof Promise){
-                p.then(resolve,reject)
-            }else{
+Promise.race = function (list) {
+    return new Promise((resolve, reject) => {
+        list.forEach(p => {
+            if (p instanceof Promise) {
+                p.then(resolve, reject)
+            } else {
                 resolve(p);
             }
         })
